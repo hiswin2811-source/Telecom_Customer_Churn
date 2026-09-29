@@ -1,0 +1,53 @@
+Feature,Mean_SHAP_Importance
+cat__Contract_Month-to-month,0.6686797
+num__tenure,0.3514939
+cat__OnlineSecurity_No,0.23952179
+cat__InternetService_Fiber optic,0.19997022
+cat__TechSupport_No,0.1596152
+cat__PaymentMethod_Electronic check,0.14463261
+cat__Contract_Two year,0.13155447
+num__MonthlyCharges,0.12628727
+num__TotalChargesPerTenure,0.113123
+num__TotalCharges,0.095277146
+cat__PaperlessBilling_No,0.09288846
+cat__OnlineBackup_No,0.07102251
+cat__MultipleLines_No,0.069458686
+cat__Contract_One year,0.05596249
+cat__StreamingMovies_Yes,0.047991216
+cat__Dependents_No,0.034785017
+cat__PaperlessBilling_Yes,0.03340191
+cat__StreamingTV_Yes,0.026395854
+num__SeniorCitizen,0.025070513
+cat__TenureGroup_0-1 Year,0.020419275
+cat__InternetService_DSL,0.016322708
+cat__InternetService_No,0.010459561
+cat__StreamingTV_No,0.008632058
+cat__MultipleLines_Yes,0.0059040724
+cat__gender_Female,0.0048623946
+cat__PaymentMethod_Bank transfer (automatic),0.0040408443
+cat__gender_Male,0.0039703096
+cat__PhoneService_No,0.0033966512
+cat__Dependents_Yes,0.0033059842
+cat__PhoneService_Yes,0.0032436561
+cat__OnlineBackup_Yes,0.0031798892
+cat__StreamingMovies_No,0.002946294
+cat__DeviceProtection_Yes,0.0024903573
+num__ServiceCount,0.0020835786
+cat__TenureGroup_4-5 Years,0.0020446996
+cat__DeviceProtection_No,0.001638959
+cat__TechSupport_Yes,0.0015196095
+cat__Partner_No,0.00090370676
+cat__PaymentMethod_Mailed check,0.00063247565
+cat__TenureGroup_2-4 Years,0.00051290443
+cat__PaymentMethod_Credit card (automatic),0.00046310702
+cat__TenureGroup_1-2 Years,0.00033789987
+cat__MultipleLines_No phone service,0.0
+cat__Partner_Yes,0.0
+cat__StreamingTV_No internet service,0.0
+cat__TechSupport_No internet service,0.0
+cat__OnlineBackup_No internet service,0.0
+cat__DeviceProtection_No internet service,0.0
+cat__OnlineSecurity_Yes,0.0
+cat__OnlineSecurity_No internet service,0.0
+cat__StreamingMovies_No internet service,0.0
+cat__TenureGroup_5+ Years,0.0

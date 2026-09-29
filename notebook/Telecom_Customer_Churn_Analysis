@@ -1,0 +1,862 @@
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    confusion_matrix,
+    classification_report,
+    roc_curve
+)
+
+from xgboost import XGBClassifier
+import shap
+
+print("Libraries imported successfully!")
+
+df = pd.read_csv(r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\dataset\WA_Fn-UseC_-Telco-Customer-Churn.csv")
+
+print("Dataset loaded successfully!")
+df.head()
+print("Dataset Shape:", df.shape)
+print(df.columns.tolist())
+df.info()
+df.isnull().sum()
+df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+
+print("Missing TotalCharges:", df["TotalCharges"].isnull().sum())
+df["TotalCharges"] = df["TotalCharges"].fillna(0)
+
+print("Missing values after cleaning:")
+print(df["TotalCharges"].isnull().sum())
+print(df["Churn"].value_counts())
+print("\nChurn Percentage:")
+print(df["Churn"].value_counts(normalize=True) * 100)
+plt.figure(figsize=(6, 4))
+
+sns.countplot(data=df, x="Churn")
+
+plt.title("Customer Churn Distribution")
+plt.xlabel("Churn")
+plt.ylabel("Number of Customers")
+
+plt.show()
+plt.figure(figsize=(8, 5))
+
+sns.countplot(data=df, x="Contract", hue="Churn")
+
+plt.title("Customer Churn by Contract Type")
+plt.xlabel("Contract Type")
+plt.ylabel("Number of Customers")
+plt.xticks(rotation=15)
+
+plt.show()
+contract_churn = pd.crosstab(
+    df["Contract"],
+    df["Churn"],
+    normalize="index"
+) * 100
+
+print(contract_churn.round(2))
+internet_churn = pd.crosstab(
+    df["InternetService"],
+    df["Churn"],
+    normalize="index"
+) * 100
+
+print(internet_churn.round(2))
+plt.figure(figsize=(8, 5))
+
+sns.barplot(
+    data=df,
+    x="InternetService",
+    y="Churn",
+    estimator=lambda x: (x == "Yes").mean() * 100
+)
+
+plt.title("Churn Rate by Internet Service")
+plt.xlabel("Internet Service")
+plt.ylabel("Churn Rate (%)")
+
+plt.show()
+plt.figure(figsize=(8, 5))
+
+sns.barplot(
+    data=df,
+    x="InternetService",
+    y="Churn",
+    estimator=lambda x: (x == "Yes").mean() * 100
+)
+
+plt.title("Churn Rate by Internet Service")
+plt.xlabel("Internet Service")
+plt.ylabel("Churn Rate (%)")
+
+plt.show()
+partner_churn = pd.crosstab(
+    df["Partner"],
+    df["Churn"],
+    normalize="index"
+) * 100
+
+print(partner_churn.round(2))
+plt.figure(figsize=(7, 5))
+
+sns.barplot(
+    data=df,
+    x="Partner",
+    y="Churn",
+    estimator=lambda x: (x == "Yes").mean() * 100
+)
+
+plt.title("Churn Rate by Partner Status")
+plt.xlabel("Has Partner")
+plt.ylabel("Churn Rate (%)")
+
+plt.show()
+# Feature 1: Average charges per month over the customer's tenure
+df["TotalChargesPerTenure"] = np.where(
+    df["tenure"] > 0,
+    df["TotalCharges"] / df["tenure"],
+    df["MonthlyCharges"]
+)
+
+# Feature 2: Count the number of subscribed services
+service_columns = [
+    "PhoneService",
+    "MultipleLines",
+    "OnlineSecurity",
+    "OnlineBackup",
+    "DeviceProtection",
+    "TechSupport",
+    "StreamingTV",
+    "StreamingMovies"
+]
+
+df["ServiceCount"] = (df[service_columns] == "Yes").sum(axis=1)
+
+# Feature 3: Group customers based on tenure
+df["TenureGroup"] = pd.cut(
+    df["tenure"],
+    bins=[-1, 12, 24, 48, 60, float("inf")],
+    labels=["0-1 Year", "1-2 Years", "2-4 Years", "4-5 Years", "5+ Years"]
+)
+
+print("Feature engineering completed!")
+print(df[["tenure", "TotalCharges", "TotalChargesPerTenure",
+          "ServiceCount", "TenureGroup"]].head())
+# Remove customer ID
+df_model = df.drop("customerID", axis=1)
+
+# Separate input features and target
+X = df_model.drop("Churn", axis=1)
+y = df_model["Churn"].map({"No": 0, "Yes": 1})
+
+print("Features shape:", X.shape)
+print("Target shape:", y.shape)
+print("\nTarget values:")
+print(y.value_counts())
+# Numerical columns
+numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
+
+# Categorical columns
+categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
+
+print("Numerical Features:")
+print(numeric_features)
+
+print("\nCategorical Features:")
+print(categorical_features)
+from sklearn.preprocessing import OneHotEncoder
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("num", StandardScaler(), numeric_features),
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features)
+    ]
+)
+
+print("Preprocessing pipeline created successfully!")
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
+
+print("Training data:", X_train.shape)
+print("Testing data:", X_test.shape)
+logistic_model = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", LogisticRegression(max_iter=1000, random_state=42))
+    ]
+)
+
+logistic_model.fit(X_train, y_train)
+
+print("Logistic Regression model trained successfully!")
+y_pred = logistic_model.predict(X_test)
+y_prob = logistic_model.predict_proba(X_test)[:, 1]
+
+print("Logistic Regression Results")
+print("--------------------------------")
+print("Accuracy :", round(accuracy_score(y_test, y_pred), 4))
+print("Precision:", round(precision_score(y_test, y_pred), 4))
+print("Recall   :", round(recall_score(y_test, y_pred), 4))
+print("AUC-ROC  :", round(roc_auc_score(y_test, y_prob), 4))
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+random_forest_model = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", RandomForestClassifier(
+            n_estimators=200,
+            random_state=42,
+            class_weight="balanced"
+        ))
+    ]
+)
+
+random_forest_model.fit(X_train, y_train)
+
+print("Random Forest model trained successfully!")
+rf_pred = random_forest_model.predict(X_test)
+rf_prob = random_forest_model.predict_proba(X_test)[:, 1]
+
+print("Random Forest Results")
+print("--------------------------------")
+print("Accuracy :", round(accuracy_score(y_test, rf_pred), 4))
+print("Precision:", round(precision_score(y_test, rf_pred), 4))
+print("Recall   :", round(recall_score(y_test, rf_pred), 4))
+print("AUC-ROC  :", round(roc_auc_score(y_test, rf_prob), 4))
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, rf_pred))
+xgb_model = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", XGBClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42,
+            eval_metric="logloss"
+        ))
+    ]
+)
+
+xgb_model.fit(X_train, y_train)
+
+print("XGBoost model trained successfully!")
+xgb_pred = xgb_model.predict(X_test)
+xgb_prob = xgb_model.predict_proba(X_test)[:, 1]
+
+print("XGBoost Results")
+print("--------------------------------")
+print("Accuracy :", round(accuracy_score(y_test, xgb_pred), 4))
+print("Precision:", round(precision_score(y_test, xgb_pred), 4))
+print("Recall   :", round(recall_score(y_test, xgb_pred), 4))
+print("AUC-ROC  :", round(roc_auc_score(y_test, xgb_prob), 4))
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, xgb_pred))
+results = pd.DataFrame({
+    "Model": [
+        "Logistic Regression",
+        "Random Forest",
+        "XGBoost"
+    ],
+    "Accuracy": [
+        accuracy_score(y_test, y_pred),
+        accuracy_score(y_test, rf_pred),
+        accuracy_score(y_test, xgb_pred)
+    ],
+    "Precision": [
+        precision_score(y_test, y_pred),
+        precision_score(y_test, rf_pred),
+        precision_score(y_test, xgb_pred)
+    ],
+    "Recall": [
+        recall_score(y_test, y_pred),
+        recall_score(y_test, rf_pred),
+        recall_score(y_test, xgb_pred)
+    ],
+    "AUC-ROC": [
+        roc_auc_score(y_test, y_prob),
+        roc_auc_score(y_test, rf_prob),
+        roc_auc_score(y_test, xgb_prob)
+    ]
+})
+
+print(results.round(4))
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+cv = StratifiedKFold(
+    n_splits=5,
+    shuffle=True,
+    random_state=42
+)
+
+print("5-Fold Cross-Validation setup completed!")
+cv_scores = {}
+
+for name, model in [
+    ("Logistic Regression", logistic_model),
+    ("Random Forest", random_forest_model),
+    ("XGBoost", xgb_model)
+]:
+    scores = cross_val_score(
+        model,
+        X_train,
+        y_train,
+        cv=cv,
+        scoring="roc_auc"
+    )
+    
+    cv_scores[name] = scores
+    
+    print(f"{name}")
+    print("Fold AUC-ROC:", scores.round(4))
+    print("Mean AUC-ROC:", round(scores.mean(), 4))
+    print()
+    from sklearn.model_selection import GridSearchCV
+
+logistic_param_grid = {
+    "classifier__C": [0.01, 0.1, 1, 10],
+    "classifier__solver": ["liblinear", "lbfgs"]
+}
+
+logistic_grid = GridSearchCV(
+    logistic_model,
+    param_grid=logistic_param_grid,
+    cv=5,
+    scoring="roc_auc",
+    n_jobs=-1
+)
+
+logistic_grid.fit(X_train, y_train)
+
+print("Best Parameters:", logistic_grid.best_params_)
+print("Best CV AUC-ROC:", round(logistic_grid.best_score_, 4))
+rf_param_grid = {
+    "classifier__n_estimators": [100, 200],
+    "classifier__max_depth": [None, 10, 20],
+    "classifier__min_samples_split": [2, 5]
+}
+
+rf_grid = GridSearchCV(
+    random_forest_model,
+    param_grid=rf_param_grid,
+    cv=5,
+    scoring="roc_auc",
+    n_jobs=-1
+)
+
+rf_grid.fit(X_train, y_train)
+
+print("Best Parameters:", rf_grid.best_params_)
+print("Best CV AUC-ROC:", round(rf_grid.best_score_, 4))
+xgb_param_grid = {
+    "classifier__n_estimators": [100, 200],
+    "classifier__max_depth": [3, 4, 6],
+    "classifier__learning_rate": [0.05, 0.1],
+    "classifier__subsample": [0.8, 1.0]
+}
+
+xgb_grid = GridSearchCV(
+    xgb_model,
+    param_grid=xgb_param_grid,
+    cv=5,
+    scoring="roc_auc",
+    n_jobs=-1
+)
+
+xgb_grid.fit(X_train, y_train)
+
+print("Best Parameters:", xgb_grid.best_params_)
+print("Best CV AUC-ROC:", round(xgb_grid.best_score_, 4))
+# Predictions from tuned models
+log_grid_pred = logistic_grid.predict(X_test)
+log_grid_prob = logistic_grid.predict_proba(X_test)[:, 1]
+
+rf_grid_pred = rf_grid.predict(X_test)
+rf_grid_prob = rf_grid.predict_proba(X_test)[:, 1]
+
+xgb_grid_pred = xgb_grid.predict(X_test)
+xgb_grid_prob = xgb_grid.predict_proba(X_test)[:, 1]
+
+
+# Compare tuned models
+tuned_results = pd.DataFrame({
+    "Model": [
+        "Tuned Logistic Regression",
+        "Tuned Random Forest",
+        "Tuned XGBoost"
+    ],
+    "Accuracy": [
+        accuracy_score(y_test, log_grid_pred),
+        accuracy_score(y_test, rf_grid_pred),
+        accuracy_score(y_test, xgb_grid_pred)
+    ],
+    "Precision": [
+        precision_score(y_test, log_grid_pred),
+        precision_score(y_test, rf_grid_pred),
+        precision_score(y_test, xgb_grid_pred)
+    ],
+    "Recall": [
+        recall_score(y_test, log_grid_pred),
+        recall_score(y_test, rf_grid_pred),
+        recall_score(y_test, xgb_grid_pred)
+    ],
+    "AUC-ROC": [
+        roc_auc_score(y_test, log_grid_prob),
+        roc_auc_score(y_test, rf_grid_prob),
+        roc_auc_score(y_test, xgb_grid_prob)
+    ]
+})
+
+print(tuned_results.round(4))
+cm = confusion_matrix(y_test, xgb_grid_pred)
+
+plt.figure(figsize=(6, 5))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=["No Churn", "Churn"],
+    yticklabels=["No Churn", "Churn"]
+)
+
+plt.title("Confusion Matrix - Tuned XGBoost")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+
+plt.show()
+# Calculate ROC curves
+fpr_log, tpr_log, _ = roc_curve(y_test, log_grid_prob)
+fpr_rf, tpr_rf, _ = roc_curve(y_test, rf_grid_prob)
+fpr_xgb, tpr_xgb, _ = roc_curve(y_test, xgb_grid_prob)
+
+# Plot ROC curves
+plt.figure(figsize=(8, 6))
+
+plt.plot(
+    fpr_log, tpr_log,
+    label=f"Logistic Regression (AUC = {roc_auc_score(y_test, log_grid_prob):.3f})"
+)
+
+plt.plot(
+    fpr_rf, tpr_rf,
+    label=f"Random Forest (AUC = {roc_auc_score(y_test, rf_grid_prob):.3f})"
+)
+
+plt.plot(
+    fpr_xgb, tpr_xgb,
+    label=f"XGBoost (AUC = {roc_auc_score(y_test, xgb_grid_prob):.3f})"
+)
+
+plt.plot([0, 1], [0, 1], linestyle="--")
+
+plt.title("ROC Curve - Tuned Models")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.grid()
+
+plt.show()
+# Get the trained XGBoost classifier from the pipeline
+# Get the best XGBoost pipeline from GridSearchCV
+best_xgb_pipeline = xgb_grid.best_estimator_
+
+# Get the trained XGBoost classifier
+xgb_classifier = best_xgb_pipeline.named_steps["classifier"]
+
+# Get the fitted preprocessor
+preprocessor_fitted = best_xgb_pipeline.named_steps["preprocessor"]
+
+# Transform the test data
+X_test_transformed = preprocessor_fitted.transform(X_test)
+
+# Get feature names after One-Hot Encoding
+feature_names = preprocessor_fitted.get_feature_names_out()
+
+# Create SHAP explainer
+explainer = shap.TreeExplainer(xgb_classifier)
+
+# Calculate SHAP values
+shap_values = explainer.shap_values(X_test_transformed)
+
+print("SHAP analysis completed!")
+plt.figure(figsize=(10, 7))
+
+shap.summary_plot(
+    shap_values,
+    X_test_transformed,
+    feature_names=feature_names,
+    show=False
+)
+
+plt.title("SHAP Feature Importance - XGBoost")
+plt.tight_layout()
+plt.show()
+# Calculate average absolute SHAP importance
+shap_importance = np.abs(shap_values).mean(axis=0)
+
+# Create feature importance table
+shap_importance_df = pd.DataFrame({
+    "Feature": feature_names,
+    "Mean_SHAP_Importance": shap_importance
+})
+
+# Sort from most important to least important
+shap_importance_df = shap_importance_df.sort_values(
+    "Mean_SHAP_Importance",
+    ascending=False
+)
+
+print("Top 10 Features Influencing Customer Churn:")
+print(shap_importance_df.head(10).round(4).to_string(index=False))
+# Select the best model based on AUC-ROC
+best_model_row = tuned_results.loc[
+    tuned_results["AUC-ROC"].idxmax()
+]
+
+print("BEST MODEL")
+print("--------------------------------")
+print("Model     :", best_model_row["Model"])
+print("Accuracy  :", round(best_model_row["Accuracy"], 4))
+print("Precision :", round(best_model_row["Precision"], 4))
+print("Recall    :", round(best_model_row["Recall"], 4))
+print("AUC-ROC   :", round(best_model_row["AUC-ROC"], 4))
+print("BUSINESS RECOMMENDATIONS")
+print("=" * 50)
+
+print("""
+1. Focus retention campaigns on month-to-month customers.
+   These customers show higher churn risk than customers with
+   longer-term contracts.
+
+2. Investigate Fiber Optic customers carefully.
+   Our EDA shows a higher churn rate among Fiber Optic customers
+   compared with DSL customers.
+
+3. Encourage longer-term contracts.
+   Offer discounts, loyalty benefits, or attractive renewal plans
+   to move customers from month-to-month contracts to one-year
+   or two-year contracts.
+
+4. Use the churn prediction model for proactive retention.
+   Customers identified as high-risk can be contacted before
+   they decide to leave.
+
+5. Prioritize retention resources using model probabilities.
+   Customers with higher predicted churn probability should
+   receive stronger retention offers.
+
+6. Use SHAP results to personalize retention strategies.
+   The most influential features identified by SHAP can help
+   explain why individual customers are predicted to churn.
+""")
+import os
+
+# Create report folder if it doesn't exist
+os.makedirs("../report", exist_ok=True)
+
+# Save model comparison
+tuned_results.to_csv("../report/model_comparison.csv", index=False)
+
+print("Model comparison saved successfully!")
+plt.figure(figsize=(6, 4))
+
+sns.countplot(data=df, x="Churn")
+
+plt.title("Customer Churn Distribution")
+plt.xlabel("Churn")
+plt.ylabel("Number of Customers")
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\churn_distribution.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+plt.show()
+plt.figure(figsize=(8, 5))
+
+sns.countplot(data=df, x="Contract", hue="Churn")
+
+plt.title("Customer Churn by Contract Type")
+plt.xlabel("Contract Type")
+plt.ylabel("Number of Customers")
+plt.xticks(rotation=15)
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\churn_by_contract.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+plt.figure(figsize=(8, 5))
+
+sns.barplot(
+    data=df,
+    x="InternetService",
+    y="Churn",
+    estimator=lambda x: (x == "Yes").mean() * 100
+)
+
+plt.title("Churn Rate by Internet Service")
+plt.xlabel("Internet Service")
+plt.ylabel("Churn Rate (%)")
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\churn_by_internet_service.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+plt.figure(figsize=(7, 5))
+
+sns.barplot(
+    data=df,
+    x="Partner",
+    y="Churn",
+    estimator=lambda x: (x == "Yes").mean() * 100
+)
+
+plt.title("Churn Rate by Partner Status")
+plt.xlabel("Has Partner")
+plt.ylabel("Churn Rate (%)")
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\churn_by_partner.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+# Confusion Matrix - Tuned XGBoost
+
+cm = confusion_matrix(y_test, xgb_grid_pred)
+
+plt.figure(figsize=(6, 5))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=["No Churn", "Churn"],
+    yticklabels=["No Churn", "Churn"]
+)
+
+plt.title("Confusion Matrix - Tuned XGBoost")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\confusion_matrix_xgboost.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("Confusion matrix saved successfully!")
+# ROC Curve - Tuned Models
+
+fpr_log, tpr_log, _ = roc_curve(y_test, log_grid_prob)
+fpr_rf, tpr_rf, _ = roc_curve(y_test, rf_grid_prob)
+fpr_xgb, tpr_xgb, _ = roc_curve(y_test, xgb_grid_prob)
+
+plt.figure(figsize=(8, 6))
+
+plt.plot(
+    fpr_log,
+    tpr_log,
+    label=f"Logistic Regression (AUC = {roc_auc_score(y_test, log_grid_prob):.3f})"
+)
+
+plt.plot(
+    fpr_rf,
+    tpr_rf,
+    label=f"Random Forest (AUC = {roc_auc_score(y_test, rf_grid_prob):.3f})"
+)
+
+plt.plot(
+    fpr_xgb,
+    tpr_xgb,
+    label=f"XGBoost (AUC = {roc_auc_score(y_test, xgb_grid_prob):.3f})"
+)
+
+plt.plot([0, 1], [0, 1], linestyle="--")
+
+plt.title("ROC Curve - Tuned Models")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.grid()
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\roc_curve.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("ROC curve saved successfully!")
+plt.figure(figsize=(10, 7))
+
+shap.summary_plot(
+    shap_values,
+    X_test_transformed,
+    feature_names=feature_names,
+    show=False
+)
+
+plt.title("SHAP Feature Importance - XGBoost")
+plt.tight_layout()
+
+plt.savefig(
+    r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\graphs\shap_feature_importance.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("SHAP graph saved successfully!")
+import os
+
+report_path = r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\report"
+
+os.makedirs(report_path, exist_ok=True)
+
+tuned_results.to_csv(
+    os.path.join(report_path, "model_comparison.csv"),
+    index=False
+)
+
+print("Model comparison saved successfully!")
+print("\nFinal Model Comparison:")
+print(tuned_results.round(4))
+best_model = tuned_results.loc[tuned_results["AUC-ROC"].idxmax()]
+
+print("=" * 60)
+print("FINAL PROJECT MODEL SUMMARY")
+print("=" * 60)
+
+print("Best Model   :", best_model["Model"])
+print("Accuracy     :", round(best_model["Accuracy"], 4))
+print("Precision    :", round(best_model["Precision"], 4))
+print("Recall       :", round(best_model["Recall"], 4))
+print("AUC-ROC      :", round(best_model["AUC-ROC"], 4))
+
+print("\nModel Comparison:")
+print(tuned_results.round(4).to_string(index=False))
+print("=" * 60)
+print("BUSINESS INSIGHTS & RECOMMENDATIONS")
+print("=" * 60)
+
+print("""
+1. TARGET HIGH-RISK CUSTOMERS
+   Use the churn prediction model to identify customers
+   with a high probability of leaving.
+
+2. FOCUS ON MONTH-TO-MONTH CUSTOMERS
+   Customers on shorter-term contracts should be prioritized
+   for retention campaigns and long-term contract offers.
+
+3. ADDRESS FIBER OPTIC CUSTOMER CHURN
+   EDA indicates that Fiber Optic customers have a higher
+   churn rate than DSL customers. Investigate service quality,
+   pricing and customer satisfaction for this segment.
+
+4. PROVIDE RETENTION OFFERS
+   Offer discounts, loyalty benefits, upgrades or personalized
+   plans to customers identified as high-risk.
+
+5. USE SHAP FOR PERSONALIZED ACTIONS
+   SHAP analysis helps identify the factors contributing to
+   individual churn predictions. These factors can guide
+   targeted retention strategies.
+
+6. PRIORITIZE RETENTION RESOURCES
+   Customers with the highest predicted churn probability
+   should receive stronger and more immediate intervention.
+""")
+import joblib
+import os
+
+models_path = r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\models"
+
+os.makedirs(models_path, exist_ok=True)
+
+joblib.dump(
+    logistic_grid.best_estimator_,
+    os.path.join(models_path, "tuned_logistic_regression.pkl")
+)
+
+joblib.dump(
+    rf_grid.best_estimator_,
+    os.path.join(models_path, "tuned_random_forest.pkl")
+)
+
+joblib.dump(
+    xgb_grid.best_estimator_,
+    os.path.join(models_path, "tuned_xgboost.pkl")
+)
+
+print("All tuned models saved successfully!")
+print("=" * 60)
+print("TOP 10 SHAP FEATURES")
+print("=" * 60)
+
+print(shap_importance_df.head(10).round(4).to_string(index=False))
+
+print("\n" + "=" * 60)
+print("FINAL MODEL RESULTS")
+print("=" * 60)
+
+print(tuned_results.round(4).to_string(index=False))
+print("TOP 10 SHAP FEATURES")
+print("=" * 60)
+
+print(
+    shap_importance_df.head(10)
+    .round(4)
+    .to_string(index=False)
+)
+import os
+
+report_path = r"C:\Users\hiswi\OneDrive\Documents\New folder\Desktop\Telecom_Customer_Churn\report"
+
+os.makedirs(report_path, exist_ok=True)
+
+shap_importance_df.to_csv(
+    os.path.join(report_path, "shap_feature_importance.csv"),
+    index=False
+)
+
+print("SHAP feature importance saved successfully!")
